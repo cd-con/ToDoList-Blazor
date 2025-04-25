@@ -1,0 +1,213 @@
+﻿@page "/"
+@inject TaskService TaskService
+@inject IDialogService DialogService
+@using System.Text.RegularExpressions;
+
+<MudPaper>
+    <MudCard Class="sticky-top pt-5 pr-2 pl-2 pb-2">
+        <!-- Поиск и сортировка -->
+        <MudTextField T="string" Label="Поиск" TextChanged="@OnSearchChanged"
+                        Variant="Variant.Outlined" Adornment="Adornment.Start"
+                        AdornmentIcon="@Icons.Material.Filled.Search"
+                        Immediate="false" DebounceInterval="300"
+                        Placeholder="Поиск (поддерживает регулярные выражения)" Class="mb-4" />
+
+        <MudSelect T="SortOption" Label="Сортировать по" @bind-Value="SelectedSort"
+                    Variant="Variant.Outlined" Dense Class="mb-4">
+                <MudSelectItem Value="SortOption.None">Без сортировки</MudSelectItem>
+                <MudSelectItem Value="SortOption.ByPriority">По приоритету</MudSelectItem>
+                <MudSelectItem Value="SortOption.ByCreatedDate">По дате создания</MudSelectItem>
+            </MudSelect>
+
+            <MudDivider Class="my-4" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@OpenAddTaskDialog">Добавить задачу</MudButton>
+        </MudCard>
+
+     <MudDropContainer T="TaskModel" Items="FilteredTasks" ItemDropped="ItemUpdated"
+                       @key="FilteredTasks"
+                       ItemsSelector="@((item, zone) => item.IsActive.ToString() == zone)"
+                       Class="flex-grow-1">
+         <ChildContent>
+             <MudGrid>
+                 <MudItem xs="12" md="6">
+                     <MudDropZone T="TaskModel" Identifier="True" Class="rounded mud-background-gray pa-6 ma-8 flex-grow-1">
+                         <MudText Typo="Typo.h6">Активные задачи</MudText>
+                     </MudDropZone>
+                 </MudItem>
+
+                 <MudItem xs="12" md="6">
+                     <MudDropZone T="TaskModel" Identifier="False" Class="rounded mud-background-gray pa-6 ma-8 flex-grow-1">
+                         <MudText Typo="Typo.h6">Завершённые задачи</MudText>
+                     </MudDropZone>
+                 </MudItem>
+             </MudGrid>
+         </ChildContent>
+         <ItemRenderer>
+             <MudCard Class="rounded-lg my-3" Style="@($"background:{GetPriorityColor(context)}")">
+                 <MudCardHeader>
+                     <CardHeaderContent>
+                         <MudText Typo="Typo.h6">@context.Title</MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Dense>
+                            <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => OpenEditTaskDialog(context)" Color="Color.Primary" Size="Size.Small">
+                                Редактировать
+                            </MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.DeleteForever" OnClick="() => DeleteTask(context)" Color="Color.Error" Size="Size.Small">
+                                Удалить
+                            </MudMenuItem>
+                        </MudMenu>
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText Typo="Typo.body2">@context.Description</MudText>
+                        @if (!context.IsActive)
+                    {
+                        <p><strong>Завершено:</strong> @context.CompletedAt.Value.ToString("g")</p>
+                    }
+                    else
+                    {
+                        <p><strong>Создано:</strong> @context.CreatedAt.ToString("g")</p>
+                    }
+                    @if (context.Tags.Any())
+                    {
+                        <p><strong>Теги:</strong> @string.Join(", ", context.Tags)</p>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </ItemRenderer>
+    </MudDropContainer>
+</MudPaper>
+
+
+@code {
+    private List<TaskModel> TaskList = new();
+
+    private string SearchInput = string.Empty;
+    private string SearchText = string.Empty;
+
+    private enum SortOption
+    {
+        None,
+        ByPriority,
+        ByCreatedDate
+    }
+
+    private SortOption _selectedSort = SortOption.None;
+    private SortOption SelectedSort
+    {
+        get => _selectedSort;
+        set
+        {
+            if (_selectedSort != value)
+            {
+                _selectedSort = value;
+                StateHasChanged(); // <- это важно!
+            }
+        }
+    }
+
+    private List<TaskModel> FilteredTasks
+    {
+        get
+        {
+            Console.WriteLine($"Filter called! Search: {SearchText}; SortBy: {SelectedSort}");
+
+            var query = TaskList
+                .Where(t => string.IsNullOrWhiteSpace(SearchText) ||
+                            Regex.IsMatch(t.Title, Regex.Escape(SearchText), RegexOptions.IgnoreCase) ||
+                            (t.Description != null && Regex.IsMatch(t.Description, Regex.Escape(SearchText), RegexOptions.IgnoreCase)));
+            query = SelectedSort switch
+            {
+                SortOption.ByPriority => query.OrderByDescending(t => t.Priority),
+                SortOption.ByCreatedDate => query.OrderByDescending(t => t.CreatedAt),
+                _ => query
+            };
+
+            return query.ToList();
+        }
+    }
+
+    private void OnSearchChanged(string text)
+    {
+        SearchText = text;
+        StateHasChanged();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        TaskList = (await TaskService.GetTasksAsync()).ToList();
+        Console.WriteLine("Loaded " + TaskList.Count);
+    }
+
+    private async Task ItemUpdated(MudItemDropInfo<TaskModel> dropItem)
+    {
+        dropItem.Item.IsActive = dropItem.DropzoneIdentifier == "True";
+        if (!dropItem.Item.IsActive)
+            dropItem.Item.CompletedAt = DateTime.Now;
+        await TaskService.UpdateTaskAsync(dropItem.Item);
+    }
+
+    private async Task OpenAddTaskDialog()
+    {
+        var parameters = new DialogParameters();
+        var dialog = DialogService.Show<TaskDialog>("Добавить задачу", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Cancelled)
+        {
+            var newTask = result.Data as TaskModel;
+            newTask.CreatedAt = DateTime.Now;
+            newTask.IsActive = true;
+            if (newTask != null)
+            {
+                await TaskService.AddTaskAsync(newTask);
+                await OnInitializedAsync();
+            }
+        }
+    }
+
+    private async Task OpenEditTaskDialog(TaskModel task)
+    {
+        var parameters = new DialogParameters
+        {
+            { "Task", task }
+        };
+        var dialog = DialogService.Show<TaskDialog>("Редактировать задачу", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Cancelled)
+        {
+            var updatedTask = result.Data as TaskModel;
+            if (updatedTask != null)
+            {
+                await TaskService.UpdateTaskAsync(updatedTask);
+                await OnInitializedAsync();
+            }
+        }
+    }
+
+    private async Task DeleteTask(TaskModel task)
+    {
+        var confirm = await DialogService.ShowMessageBox("Подтверждение", "Вы уверены, что хотите удалить эту задачу?", yesText: "Да", noText: "Нет");
+        if (confirm == true)
+        {
+            await TaskService.DeleteTaskAsync(task.Id);
+            await OnInitializedAsync();
+        }
+    }
+
+    private string GetPriorityColor(TaskModel model)
+    {
+        if (!model.IsActive)
+            return Colors.Grey.Darken1;
+
+        return model.Priority switch
+        {
+            TaskPriority.High => Colors.Red.Lighten1,
+            TaskPriority.Medium => Colors.Orange.Lighten1,
+            TaskPriority.Low => Colors.Green.Lighten4,
+            _ => Colors.Blue.Lighten5
+        };
+    }
+}
