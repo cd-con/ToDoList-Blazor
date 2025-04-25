@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace Zavod.Data
 {
     public enum TaskPriority
@@ -9,6 +7,9 @@ namespace Zavod.Data
         High
     }
 
+    /// <summary>
+    /// Task model description
+    /// </summary>
     public class TaskModel
     {
         public int Id { get; set; }
@@ -20,6 +21,6 @@ namespace Zavod.Data
 
         public TaskPriority Priority { get; set; } = TaskPriority.Medium;
 
-        public List<string> Tags { get; set; } = new(); // —охран€ютс€ как JSON строка или в отдельной таблице
+        public List<string> Tags { get; set; } = new(); //TODO
     }
 }

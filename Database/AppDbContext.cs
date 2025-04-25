@@ -3,6 +3,9 @@ using Zavod.Data;
 
 namespace Zavod.Database
 {
+    /// <summary>
+    /// Database context interface
+    /// </summary>
     public class AppDbContext : DbContext
     {
         public DbSet<TaskModel> Tasks { get; set; }

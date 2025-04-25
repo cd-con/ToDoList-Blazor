@@ -3,9 +3,9 @@
 @inject IDialogService DialogService
 @using System.Text.RegularExpressions;
 
+@* Possibly should be separated in different files as components but im too lazy todo this*@
 <MudPaper>
     <MudCard Class="sticky-top pt-5 pr-2 pl-2 pb-2">
-        <!-- Поиск и сортировка -->
         <MudTextField T="string" Label="Поиск" TextChanged="@OnSearchChanged"
                         Variant="Variant.Outlined" Adornment="Adornment.Start"
                         AdornmentIcon="@Icons.Material.Filled.Search"
@@ -102,7 +102,7 @@
             if (_selectedSort != value)
             {
                 _selectedSort = value;
-                StateHasChanged(); // <- это важно!
+                StateHasChanged();
             }
         }
     }
